@@ -36,7 +36,8 @@
         "files": [
             "resources/*.mp3",
             "resources/title.png",
-            "resources/levels/*.json"
+            "resources/levels/*.json",
+            "resources/triggers/*.png"
         ]
     }
 }

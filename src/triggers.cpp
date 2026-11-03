@@ -1,6 +1,7 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GameObject.hpp>
 #include <Geode/modify/EffectGameObject.hpp>
+#include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/ObjectToolbox.hpp>
 #include <Geode/modify/EditorUI.hpp>
 #include <Geode/ui/Notification.hpp>
@@ -22,6 +23,24 @@ static constexpr int toastID = 9702;
 static int templateFor(int id) {
 	return id == vibrateID ? 1520 : 1268;
 }
+
+static bool isMine(int id) {
+	return id == vibrateID || id == toastID;
+}
+
+static std::string iconFor(int id) {
+	return id == vibrateID ? "vibrate_trigger.png"_spr : "toast_trigger.png"_spr;
+}
+
+struct IdSwap {
+	GameObject* obj;
+	int orig;
+
+	IdSwap(GameObject* o) : obj(o), orig(o->m_objectID) {
+		if (mhEnabled() && isMine(orig)) obj->m_objectID = templateFor(orig);
+	}
+	~IdSwap() { obj->m_objectID = orig; }
+};
 
 #ifdef GEODE_IS_ANDROID
 // jni snippets for toast + vibrate
@@ -187,29 +206,39 @@ static void toast(std::string const& text) {
 	Notification::create(text, NotificationIcon::Info, 2.f)->show();
 }
 
-class $modify(MHObject, GameObject) {
-	static GameObject* createWithKey(int key) {
-		if (!mhEnabled() || (key != vibrateID && key != toastID)) return GameObject::createWithKey(key);
-		auto obj = GameObject::createWithKey(templateFor(key));
-		if (obj) obj->m_objectID = key;
-		return obj;
-	}
-};
-
 class $modify(MHEffect, EffectGameObject) {
 	struct Fields {
 		std::string text;
+		int kind = 0;
 	};
 
+	int myKind() {
+		if (m_fields->kind) return m_fields->kind;
+		return isMine(m_objectID) ? m_objectID : 0;
+	}
+
+	void customSetup() {
+		IdSwap swap(this);
+		EffectGameObject::customSetup();
+	}
+
+	void triggerActivated(float x) {
+		IdSwap swap(this);
+		EffectGameObject::triggerActivated(x);
+	}
+
 	void triggerObject(GJBaseGameLayer* layer, int uniqueID, gd::vector<int> const* remapKeys) {
-		if (mhEnabled() && m_objectID == vibrateID) return vibrate();
-		if (mhEnabled() && m_objectID == toastID) return toast(m_fields->text);
+		if (mhEnabled()) {
+			int kind = this->myKind();
+			if (kind == vibrateID) return vibrate();
+			if (kind == toastID) return toast(m_fields->text);
+		}
 		EffectGameObject::triggerObject(layer, uniqueID, remapKeys);
 	}
 
 	gd::string getSaveString(GJBaseGameLayer* layer) {
 		std::string s = EffectGameObject::getSaveString(layer);
-		if (m_objectID == toastID && !m_fields->text.empty()) {
+		if (this->myKind() == toastID && !m_fields->text.empty()) {
 			if (s.ends_with(',')) s.pop_back();
 			s += fmt::format(",31,{}", base64::encode(m_fields->text, base64::Base64Variant::UrlWithPad));
 		}
@@ -217,8 +246,9 @@ class $modify(MHEffect, EffectGameObject) {
 	}
 
 	void customObjectSetup(gd::vector<gd::string>& values, gd::vector<void*>& exists) {
+		IdSwap swap(this);
 		EffectGameObject::customObjectSetup(values, exists);
-		if (m_objectID != toastID || values.size() <= 31) return;
+		if (!isMine(swap.orig) || values.size() <= 31) return;
 		std::string raw = values[31];
 		if (raw.empty()) return;
 		auto res = base64::decodeString(raw, base64::Base64Variant::UrlWithPad);
@@ -226,15 +256,36 @@ class $modify(MHEffect, EffectGameObject) {
 	}
 };
 
+class $modify(MHObject, GameObject) {
+	void customSetup() {
+		IdSwap swap(this);
+		GameObject::customSetup();
+	}
+
+	static GameObject* createWithKey(int key) {
+		if (!mhEnabled() || !isMine(key)) return GameObject::createWithKey(key);
+
+		auto obj = GameObject::createWithKey(templateFor(key));
+		if (!obj) return nullptr;
+		obj->initWithSpriteFrameName(iconFor(key).c_str());
+		if (auto eff = typeinfo_cast<EffectGameObject*>(obj)) static_cast<MHEffect*>(eff)->m_fields->kind = key;
+		obj->m_objectID = key;
+		return obj;
+	}
+};
+
+class $modify(MHLayer, GJBaseGameLayer) {
+	void spawnObject(GameObject* object, double delay, gd::vector<int> const& remapKeys) {
+		IdSwap swap(object);
+		GJBaseGameLayer::spawnObject(object, delay, remapKeys);
+	}
+};
+
 class $modify(MHToolbox, ObjectToolbox) {
 	bool init() {
 		if (!ObjectToolbox::init()) return false;
 		if (!mhEnabled()) return true;
-		// same icon as the template trigger
-		for (int id : {vibrateID, toastID}) {
-			auto it = m_allKeys.find(templateFor(id));
-			if (it != m_allKeys.end()) m_allKeys[id] = it->second;
-		}
+		for (int id : {vibrateID, toastID}) m_allKeys[id] = iconFor(id);
 		return true;
 	}
 };

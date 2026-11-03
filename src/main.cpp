@@ -2,6 +2,7 @@
 #include <Geode/modify/GManager.hpp>
 #include <Geode/modify/MusicDownloadManager.hpp>
 #include <Geode/modify/LevelTools.hpp>
+#include <Geode/modify/LocalLevelManager.hpp>
 #include <Geode/modify/LevelSelectLayer.hpp>
 #include <Geode/modify/MenuLayer.hpp>
 #include <km7dev.server_api/include/ServerAPIEvents.hpp>
@@ -89,10 +90,11 @@ class $modify(MHMusic, MusicDownloadManager) {
 
 class $modify(MHLevelTools, LevelTools) {
 	static GJGameLevel* getLevel(int id, bool noString) {
-		if (!isMain(id)) return LevelTools::getLevel(id, noString);
+		auto lvl = LevelTools::getLevel(id, noString);
+		if (!isMain(id)) return lvl;
+		if (!lvl) lvl = GJGameLevel::create();
 
 		auto& d = mainLevels()[id - 1];
-		auto lvl = GJGameLevel::create();
 		lvl->m_levelID = id;
 		lvl->m_levelName = d.name;
 		lvl->m_creatorName = d.creator;
@@ -100,17 +102,11 @@ class $modify(MHLevelTools, LevelTools) {
 		lvl->m_levelLength = d.length;
 		lvl->m_difficulty = (GJDifficulty)d.diff;
 		lvl->m_stars = d.stars;
+		lvl->m_requiredCoins = 0;
 		lvl->m_levelType = GJLevelType::Main;
 		lvl->m_audioTrack = trackBase + id;
 		if (!noString) lvl->m_levelString = d.data;
 		return lvl;
-	}
-
-	static gd::unordered_set<int> getLevelList() {
-		if (!mhEnabled()) return LevelTools::getLevelList();
-		gd::unordered_set<int> ret;
-		for (int i = 1; i <= (int)mainLevels().size(); i++) ret.insert(i);
-		return ret;
 	}
 
 	static bool verifyLevelIntegrity(gd::string str, int id) {
@@ -137,21 +133,48 @@ class $modify(MHLevelTools, LevelTools) {
 	}
 };
 
+class $modify(MHLocalLevels, LocalLevelManager) {
+	gd::string getMainLevelString(int id) {
+		if (isMain(id)) return mainLevels()[id - 1].data;
+		return LocalLevelManager::getMainLevelString(id);
+	}
+};
+
 class $modify(MHSelect, LevelSelectLayer) {
 	bool init(int page) {
 		if (!mhEnabled()) return LevelSelectLayer::init(page);
 
 		int n = mainLevels().size();
-		if (page >= n) page = n - 1;
-		if (page < 0) page = 0;
+		page = std::clamp(page, 0, n);
 		if (!LevelSelectLayer::init(page)) return false;
 
-		while (m_scrollLayer->getTotalPages() > n) m_scrollLayer->removePageWithNumber(n);
-		while (m_scrollLayer->m_dots && m_scrollLayer->m_dots->count() > n) {
-			static_cast<CCNode*>(m_scrollLayer->m_dots->lastObject())->removeFromParent();
-			m_scrollLayer->m_dots->removeLastObject();
+		auto scroll = m_scrollLayer;
+		scroll->m_dynamicObjects->removeAllObjects();
+		for (auto dot : CCArrayExt<CCSprite*>(scroll->m_dots)) dot->removeFromParent();
+		scroll->m_dots->removeAllObjects();
+
+		for (int i = 1; i <= n; i++) {
+			if (auto lvl = GameLevelManager::get()->getMainLevel(i, true)) scroll->m_dynamicObjects->addObject(lvl);
 		}
-		m_scrollLayer->instantMoveToPage(page);
+		auto soon = GJGameLevel::create();
+		soon->m_levelID = -1;
+		scroll->m_dynamicObjects->addObject(soon);
+
+		auto batch = CCSpriteBatchNode::create("smallDot.png", 29);
+		scroll->addChild(batch, 5);
+		for (int i = 0; i < scroll->m_dynamicObjects->count(); i++) {
+			auto dot = CCSprite::create("smallDot.png");
+			batch->addChild(dot);
+			scroll->m_dots->addObject(dot);
+		}
+
+		scroll->updateDots(0.f);
+		scroll->updatePages();
+		this->updatePageWithObject(
+			scroll->m_pages->objectAtIndex(page % 3),
+			scroll->m_dynamicObjects->objectAtIndex(page)
+		);
+		scroll->repositionPagesLooped();
 		return true;
 	}
 };
