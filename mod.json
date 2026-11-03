@@ -34,7 +34,7 @@
     },
     "resources": {
         "files": [
-            "resources/1.mp3", "resources/2.mp3",
+            "resources/StereoMadness.mp3", "resources/BackOnTrack.mp3",
             "resources/levels/1.json", "resources/levels/2.json"
         ],
         "sprites" : [
