@@ -34,10 +34,11 @@
     },
     "resources": {
         "files": [
-            "resources/*.mp3",
-            "resources/title.png",
-            "resources/levels/*.json",
-            "resources/triggers/*.png"
+            "resources/1.mp3", "resources/2.mp3",
+            "resources/levels/1.json", "resources/levels/2.json"
+        ],
+        "sprites" : [
+            "resources/toast_trigger.png", "resources/vibrate_trigger.png", "resources/title.png"
         ]
     }
 }
