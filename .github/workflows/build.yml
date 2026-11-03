@@ -15,10 +15,6 @@ jobs:
         - name: Windows
           os: windows-latest
 
-        - name: iOS
-          os: macos-latest
-          target: iOS
-
         - name: macOS
           os: macos-latest
 
@@ -50,6 +46,9 @@ jobs:
     steps:
       - uses: geode-sdk/build-geode-mod/combine@main
         id: build
+        with:
+          optimize-pngs: true
+          zstd: true
 
       - uses: actions/upload-artifact@v5
         with:

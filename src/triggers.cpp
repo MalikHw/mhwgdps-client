@@ -8,7 +8,7 @@
 #include "common.hpp"
 
 #ifdef GEODE_IS_WINDOWS
-#include <Geode/cocos/robtop/glfw/glfw3.h>
+#include <windows.h>
 #endif
 #ifdef GEODE_IS_ANDROID
 #include <Geode/cocos/platform/android/jni/JniHelper.h>
@@ -133,31 +133,37 @@ static bool doToast(std::string const& text) {
 
 #ifdef GEODE_IS_WINDOWS
 class WindowShake : public CCNode {
-	GLFWwindow* m_win = nullptr;
+	HWND m_win = nullptr;
 	int m_x = 0, m_y = 0;
 	float m_time = 0.f;
 	static inline bool s_running = false;
 
+	void move(int dx, int dy) {
+		SetWindowPos(m_win, nullptr, m_x + dx, m_y + dy, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+	}
+
 	void update(float dt) override {
 		m_time += dt;
 		if (m_time >= 0.3f) return this->removeFromParent();
-		glfwSetWindowPos(m_win, m_x + (std::rand() % 5) - 2, m_y + (std::rand() % 5) - 2);
+		this->move((std::rand() % 5) - 2, (std::rand() % 5) - 2);
 	}
 
 public:
 	~WindowShake() {
-		if (m_win) glfwSetWindowPos(m_win, m_x, m_y);
+		if (m_win) this->move(0, 0);
 		s_running = false;
 	}
 
 	static void start() {
 		auto scene = CCDirector::get()->getRunningScene();
-		auto view = CCEGLView::sharedOpenGLView();
-		if (s_running || !scene || !view || !view->getWindow()) return;
+		HWND win = GetActiveWindow();
+		RECT rect;
+		if (s_running || !scene || !win || !GetWindowRect(win, &rect)) return;
 
 		auto node = new WindowShake();
-		node->m_win = view->getWindow();
-		glfwGetWindowPos(node->m_win, &node->m_x, &node->m_y);
+		node->m_win = win;
+		node->m_x = rect.left;
+		node->m_y = rect.top;
 		node->autorelease();
 		node->scheduleUpdate();
 		scene->addChild(node);
