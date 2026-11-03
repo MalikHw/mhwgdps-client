@@ -23,14 +23,18 @@ struct MainLevel {
 
 static std::vector<MainLevel>& mainLevels() {
 	static std::vector<MainLevel> list;
-	static bool loaded = false;
-	if (loaded) return list;
-	loaded = true;
+	static int attempts = 0;
+	if (!list.empty() || attempts >= 20) return list;
+	attempts++;
 
 	auto dir = Mod::get()->getResourcesDir() / "levels";
 	for (int i = 1;; i++) {
-		auto res = file::readJson(dir / fmt::format("{}.json", i));
-		if (!res) break;
+		auto path = dir / fmt::format("{}.json", i);
+		auto res = file::readJson(path);
+		if (!res) {
+			if (i == 1) log::error("couldn't read {}: {}", path, res.unwrapErr());
+			break;
+		}
 		auto j = res.unwrap();
 		MainLevel l;
 		l.name = j["name"].asString().unwrapOr("Unnamed");
@@ -42,7 +46,7 @@ static std::vector<MainLevel>& mainLevels() {
 		l.stars = j["stars"].asInt().unwrapOr(0);
 		list.push_back(std::move(l));
 	}
-	log::info("loaded {} main levels", list.size());
+	log::info("loaded {} main levels from {}", list.size(), dir);
 	return list;
 }
 
@@ -154,7 +158,10 @@ class $modify(MHSelect, LevelSelectLayer) {
 		scroll->m_dots->removeAllObjects();
 
 		for (int i = 1; i <= n; i++) {
-			if (auto lvl = GameLevelManager::get()->getMainLevel(i, true)) scroll->m_dynamicObjects->addObject(lvl);
+			auto lvl = GameLevelManager::get()->getMainLevel(i, true);
+			if (!lvl) lvl = LevelTools::getLevel(i, true);
+			if (lvl) scroll->m_dynamicObjects->addObject(lvl);
+			else log::error("no level object for main level {}", i);
 		}
 		auto soon = GJGameLevel::create();
 		soon->m_levelID = -1;
@@ -186,7 +193,7 @@ class $modify(MHMenu, MenuLayer) {
 
 		auto old = this->getChildByID("main-title");
 		auto spr = CCSprite::create("title.png"_spr);
-		if (!old || !spr) return true;
+		if (!old || !spr) return true; // no title.png yet
 
 		float w = old->getContentWidth() * old->getScaleX();
 		spr->setScale(w / spr->getContentWidth());

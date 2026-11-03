@@ -5,6 +5,7 @@
 #include <Geode/modify/ObjectToolbox.hpp>
 #include <Geode/modify/EditorUI.hpp>
 #include <Geode/ui/Notification.hpp>
+#include <Geode/ui/TextInput.hpp>
 #include <Geode/utils/base64.hpp>
 #include "common.hpp"
 
@@ -212,6 +213,7 @@ class $modify(MHEffect, EffectGameObject) {
 		int kind = 0;
 	};
 
+	// m_objectID can be swapped while gd runs, so remember what we are
 	int myKind() {
 		if (m_fields->kind) return m_fields->kind;
 		return isMine(m_objectID) ? m_objectID : 0;
@@ -272,6 +274,13 @@ class $modify(MHObject, GameObject) {
 		obj->m_objectID = key;
 		return obj;
 	}
+
+	static GameObject* objectFromVector(gd::vector<gd::string>& values, gd::vector<void*>& exists, GJBaseGameLayer* layer, bool lowDetail) {
+		auto obj = GameObject::objectFromVector(values, exists, layer, lowDetail);
+		if (!obj || !mhEnabled() || !isMine(obj->m_objectID)) return obj;
+		if (auto eff = typeinfo_cast<EffectGameObject*>(obj)) eff->customObjectSetup(values, exists);
+		return obj;
+	}
 };
 
 class $modify(MHLayer, GJBaseGameLayer) {
@@ -291,36 +300,42 @@ class $modify(MHToolbox, ObjectToolbox) {
 };
 
 class MHPopup : public SetupTriggerPopup {
-	CCTextInputNode* m_input = nullptr;
+	Ref<TextInput> m_input;
 
 	bool setupPopup(EffectGameObject* obj, CCArray* objs) {
 		bool hasText = obj->m_objectID == toastID;
-		if (!SetupTriggerPopup::init(obj, objs, 320.f, hasText ? 240.f : 200.f, 1)) return false;
+		float w = 340.f, h = hasText ? 230.f : 190.f;
+		if (!SetupTriggerPopup::init(obj, objs, w, h, 1)) return false;
 
 		this->addTitle(hasText ? "Toast Trigger" : "Vibrate Trigger");
-		this->addCloseButton("OK");
 		this->createMultiTriggerItemsDefault();
+		this->addCloseButton("OK");
 
 		if (hasText) {
-			auto bg = extension::CCScale9Sprite::create("square02b_001.png", { 0, 0, 80, 80 });
-			bg->setContentSize({ 260.f, 40.f });
-			bg->setColor({ 0, 0, 0 });
-			bg->setOpacity(90);
-			bg->setPosition({ 0.f, 40.f });
-			m_buttonMenu->addChild(bg);
+			CCNode* parent = m_mainLayer;
+			for (auto child : CCArrayExt<CCNode*>(m_mainLayer->getChildren())) {
+				if (typeinfo_cast<extension::CCScale9Sprite*>(child)) { parent = child; break; }
+			}
 
-			m_input = CCTextInputNode::create(240.f, 30.f, "Text", "bigFont.fnt");
-			m_input->setPosition({ 0.f, 40.f });
-			m_input->setLabelPlaceholderColor({ 120, 120, 120 });
-			m_input->setMaxLabelLength(100);
-			m_input->setMaxLabelScale(0.6f);
-			m_input->setDelegate(this);
-			m_input->setString(static_cast<MHEffect*>(obj)->m_fields->text);
-			m_buttonMenu->addChild(m_input);
+			m_input = TextInput::create(260.f, "Text", "bigFont.fnt");
+			m_input->setLabel("Text");
+			m_input->setMaxCharCount(120);
+			m_input->setString(static_cast<MHEffect*>(obj)->m_fields->text, false);
+			m_input->setCallback([this](std::string const& str) { this->applyText(str); });
+			m_input->setPosition({ w / 2.f, h - 80.f });
+			parent->addChild(m_input);
 		}
 
 		this->determineStartValues();
 		return true;
+	}
+
+	void applyText(std::string const& str) {
+		if (m_gameObjects && m_gameObjects->count()) {
+			for (auto o : CCArrayExt<EffectGameObject*>(m_gameObjects)) static_cast<MHEffect*>(o)->m_fields->text = str;
+		} else if (m_gameObject) {
+			static_cast<MHEffect*>(m_gameObject)->m_fields->text = str;
+		}
 	}
 
 public:
@@ -334,12 +349,9 @@ public:
 		return nullptr;
 	}
 
-	void textChanged(CCTextInputNode* node) override {
-		if (!m_input || node != m_input) return SetupTriggerPopup::textChanged(node);
-		std::string str = node->getString();
-		for (auto o : CCArrayExt<EffectGameObject*>(m_gameObjects)) {
-			static_cast<MHEffect*>(o)->m_fields->text = str;
-		}
+	void onClose(CCObject* sender) override {
+		if (m_input) this->applyText(m_input->getString());
+		SetupTriggerPopup::onClose(sender);
 	}
 };
 
