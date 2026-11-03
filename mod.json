@@ -34,8 +34,9 @@
     },
     "resources": {
         "files": [
-            "resources/*",
-            "resources/levels/*"
+            "resources/*.mp3",
+            "resources/title.png",
+            "resources/levels/*.json"
         ]
     }
 }
