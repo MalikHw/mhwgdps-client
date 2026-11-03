@@ -34,7 +34,8 @@
     },
     "resources": {
         "files": [
-            "resources/*"
+            "resources/*",
+            "resources/levels/*"
         ]
     }
 }
