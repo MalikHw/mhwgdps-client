@@ -6,14 +6,35 @@
         "android": "2.2081"
     },
     "version": "1.0.0",
-    "id": "MalikHw.mhwgdps-client",
-    "name": "mhwgdps-client",
-    "developer": "MalikHw",
-    "description": "desc.",
-    "tags": ["yes", "yeah"],
+    "id": "malikhw47.mhwgdps-client",
+    "name": "mhwgdps",
+    "developer": "MalikHw47",
+	"description": "MHwGDPS as its own client.",
+	"early-load": true,
+	"tags": ["online", "content", "gameplay"],
+	"dependencies": {
+		"geode.node-ids": ">=v1.23.3",
+		"km7dev.server_api": {
+			"version": ">=v4.0.0",
+			"importance": "required"
+		}
+	},
+	"settings": {
+		"enabled": {
+			"type": "bool",
+			"name": "Enable MHwGDPS",
+			"description": "Turns <cy>everything</c> in this mod on or off.",
+			"default": true,
+			"restart-required": true
+		}
+	},
     "links": {
         "source": "https://github.com/MalikHw/mhwgdps-client",
         "community": "https://discord.gg/G9bZ92eg2n"
     },
-    "settings": {}
+    "resources": {
+        "files": [
+            "resources/*"
+        ]
+    }
 }
